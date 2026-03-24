@@ -704,7 +704,7 @@ export function HomePage({
                   <div className="hp-card">
                     <div className="hp-card-head">
                       <div>
-                        <p className="hp-card-title">Lượt vote theo nominee</p>
+                        <p className="hp-card-title">Lượt vote theo hạng mục</p>
                         <p className="hp-card-sub">Top 10 — sắp xếp giảm dần</p>
                       </div>
                       <select
