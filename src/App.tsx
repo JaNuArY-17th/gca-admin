@@ -265,6 +265,7 @@ function App() {
           onVotedPageChange={setVotedPage}
           onNotVotedPageChange={setNotVotedPage}
           onLogout={handleLogout}
+          callApi={callApi}
         />
       ) : (
         <LoginPage

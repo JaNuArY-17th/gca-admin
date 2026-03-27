@@ -36,6 +36,7 @@ type HomePageProps = {
   onVotedPageChange: (page: number) => void;
   onNotVotedPageChange: (page: number) => void;
   onLogout: () => void;
+  callApi: <T>(path: string) => Promise<T>;
 };
 
 const styles = `
@@ -520,6 +521,82 @@ const styles = `
     .hp-body { padding: 20px 16px 48px; }
     .hp-topbar { padding: 12px 16px; }
   }
+    /* ── History lookup ── */
+  .hp-history-search {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .hp-history-search .hp-input { width: 220px; font-family: var(--mono); letter-spacing: 0.05em; }
+
+  .hp-btn-search {
+    height: 34px;
+    padding: 0 18px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #0d0d0f;
+    font-family: 'Sora', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .hp-btn-search:hover:not(:disabled) { opacity: 0.85; }
+  .hp-btn-search:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hp-history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .hp-history-cat-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  .hp-nominee-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hp-nominee-row:last-child { border-bottom: none; }
+
+  .hp-nominee-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface-hover);
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+
+  .hp-nominee-avatar-fallback {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .hp-nominee-name { font-size: 13px; color: #e8e6e1; font-weight: 500; margin: 0 0 2px; }
+  .hp-nominee-time { font-size: 11px; color: var(--muted); font-family: var(--mono); margin: 0; }
 `;
 
 const CustomBarTooltip = ({ active, payload, label }: any) => {
@@ -542,7 +619,7 @@ const CustomPieTooltip = ({ active, payload }: any) => {
   );
 };
 
-type Tab = 'overview' | 'voters';
+type Tab = 'overview' | 'voters' | 'history';
 
 export function HomePage({
   dateRange,
@@ -567,8 +644,43 @@ export function HomePage({
   onVotedPageChange,
   onNotVotedPageChange,
   onLogout,
+  callApi,
 }: HomePageProps) {
   const [tab, setTab] = useState<Tab>('overview');
+  const [historyMssv, setHistoryMssv] = useState('');
+  const [historyData, setHistoryData] = useState<any[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+const handleHistorySearch = async () => {
+  const mssv = historyMssv.trim().toUpperCase();
+  if (!mssv) return;
+  setHistoryLoading(true);
+  setHistoryError(null);
+  setHistoryData(null);
+  try {
+    const data = await callApi<any[]>(`/votes/history/${mssv}`);
+    if (!Array.isArray(data) || data.length === 0) {
+      setHistoryError('Không tìm thấy lịch sử bình chọn cho MSSV này.');
+    } else {
+      setHistoryData(data);
+    }
+  } catch (e: any) {
+    setHistoryError(e.message || 'Có lỗi xảy ra.');
+  } finally {
+    setHistoryLoading(false);
+  }
+};
+
+  // Group history by category
+  const historyByCategory = historyData
+    ? historyData.reduce((acc: Record<string, { category: any; nominees: any[] }>, item: any) => {
+      const catId = item.category?.id ?? 'unknown';
+      if (!acc[catId]) acc[catId] = { category: item.category, nominees: [] };
+      acc[catId].nominees.push(item.nominee);
+      return acc;
+    }, {})
+    : {};
 
   const votedPages = votedData ? Math.max(1, Math.ceil(votedData.total / votedData.pageSize)) : 1;
   const notVotedPages = notVotedData ? Math.max(1, Math.ceil(notVotedData.total / notVotedData.pageSize)) : 1;
@@ -628,6 +740,16 @@ export function HomePage({
                   <path d="M8 13c0-2.5 1.8-4.5 4-4.5" strokeLinecap="round" />
                 </svg>
                 Danh sách voter
+              </button>
+              <button
+                className={`hp-nav-item${tab === 'history' ? ' hp-active' : ''}`}
+                onClick={() => setTab('history')}
+              >
+                <svg className="hp-nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="8" cy="8" r="6.5" />
+                  <path d="M8 4.5V8l2.5 2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Tra cứu vote
               </button>
             </nav>
 
@@ -745,9 +867,9 @@ export function HomePage({
                                 key={i}
                                 fill={
                                   i === 0 ? '#c8f04a' :
-                                  i === 1 ? '#9abd34' :
-                                  i === 2 ? '#718b25' :
-                                  'rgba(200,240,74,0.2)'
+                                    i === 1 ? '#9abd34' :
+                                      i === 2 ? '#718b25' :
+                                        'rgba(200,240,74,0.2)'
                                 }
                               />
                             ))}
@@ -934,6 +1056,65 @@ export function HomePage({
                     )}
                   </div>
                 </div>
+              </>
+            )}
+            {tab === 'history' && (
+              <>
+                <div className="hp-page-header">
+                  <h1 className="hp-page-title">Tra cứu lịch sử bình chọn</h1>
+                  <p className="hp-page-sub">Xem voter đã vote cho nominee nào ở từng hạng mục</p>
+                </div>
+
+                <div className="hp-card" style={{ maxWidth: 560 }}>
+                  <p className="hp-card-title" style={{ marginBottom: 14 }}>Nhập MSSV</p>
+                  <div className="hp-history-search">
+                    <input
+                      className="hp-input"
+                      placeholder="VD: GBH220312"
+                      value={historyMssv}
+                      onChange={(e) => setHistoryMssv(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleHistorySearch()}
+                    />
+                    <button
+                      className="hp-btn-search"
+                      onClick={handleHistorySearch}
+                      disabled={historyLoading || !historyMssv.trim()}
+                    >
+                      {historyLoading ? 'Đang tải...' : 'Tra cứu'}
+                    </button>
+                  </div>
+                  {historyError && <p className="hp-error" style={{ marginTop: 12 }}>{historyError}</p>}
+                </div>
+
+                {historyData && Object.keys(historyByCategory).length > 0 && (
+                  <>
+                    <p className="hp-note">
+                      Tìm thấy <strong style={{ color: '#e8e6e1' }}>{historyData.length}</strong> lượt vote
+                      — MSSV <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>{historyMssv.trim().toUpperCase()}</span>
+                    </p>
+                    <div className="hp-history-grid">
+                      {Object.values(historyByCategory).map(({ category, nominees: noms }) => (
+                        <div className="hp-card" key={category?.id}>
+                          <p className="hp-history-cat-label">{category?.title ?? 'Hạng mục không xác định'}</p>
+                          {noms.map((nom: any, i: number) => (
+                            <div className="hp-nominee-row" key={nom?.id ?? i}>
+                              {nom?.imageUrl
+                                ? <img className="hp-nominee-avatar" src={nom.imageUrl} alt={nom.name} />
+                                : <div className="hp-nominee-avatar-fallback">🏆</div>
+                              }
+                              <div>
+                                <p className="hp-nominee-name">{nom?.name ?? '—'}</p>
+                                {nom?.description && (
+                                  <p className="hp-nominee-time">{nom.description.slice(0, 40)}{nom.description.length > 40 ? '…' : ''}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
 
